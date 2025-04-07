@@ -19,7 +19,7 @@ Built on top of [Slim PHP](https://www.slimframework.com/) for routing, REUT use
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/reut.git
+git clone https://github.com/m4rcTr3y/reut.git
 cd reut
 ```
 
