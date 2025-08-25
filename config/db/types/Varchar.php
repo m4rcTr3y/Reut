@@ -15,7 +15,7 @@ namespace Reut\DB\Types;
  */
  
 class Varchar extends ColumnType{
-    public function __construct(int $length=255,bool $nullable = true,string $default = null,bool $isPrimay=false){
+    public function __construct(int $length=255,bool $nullable = true,string|null $default = '',bool $isPrimay=false){
         parent::__construct($nullable,$default,$isPrimay);
         $this->name = "VARCHAR($length)";
     }

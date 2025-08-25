@@ -1,10 +1,13 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Reut\DB;
+
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use Psr\Log\LoggerInterface;
+use Reut\DB\Exceptions\ConnectionError;
 use Reut\DB\Types\ColumnType;
 
 /**
@@ -23,7 +26,8 @@ use Reut\DB\Types\ColumnType;
  * 
  */
 
-class DataBase {
+class DataBase
+{
     public $pdo;
     public $config;
     public $tableName;
@@ -36,7 +40,8 @@ class DataBase {
 
     public $columns;
 
-    public function __construct(Array $config,$columns=[],String $tableName=null,Bool $hasRelationships=false,$relationships=0,Array $fileFields=[],Array $disabledRoutes=[]) {
+    public function __construct(array $config, $columns = [], ?String $tableName = null, Bool $hasRelationships = false, $relationships = 0, array $fileFields = [], array $disabledRoutes = [])
+    {
         $this->config = $config;
         $this->tableName = $tableName;
         $this->hasRelationships = $hasRelationships;
@@ -51,9 +56,10 @@ class DataBase {
     /**
      * connect: connects to the dabase
      */
-    public function connect() {
+    public function connect()
+    {
         try {
-          /*  $this->pdo = new \PDO(
+            /*  $this->pdo = new \PDO(
                 "mysql:host={$this->config['host']};dbname={$this->config['dbname']};port=3306",
                 $this->config['username'],
                 $this->config['password']
@@ -68,36 +74,50 @@ class DataBase {
             return true;
         } catch (\PDOException $e) {
             // throw new Exception("Unk")
-            return 'error'.$e;
+            throw new ConnectionError("\nFailed to connect to database");
         }
     }
 
-    public function addColumn($columnName,ColumnType $columnType){
+    public function addColumn(string $columnName, ColumnType $columnType)
+    {
         $this->columns[$columnName] = $columnType;
     }
 
-    public function genSQL(){
-        if(empty($this->columns)){
+    public function getAddColumnSQL(string $column, ColumnType $type): string
+    {
+        return "ALTER TABLE " . strtolower($this->tableName) . " ADD $column " . $type->getSql();
+    }
+
+    public function addColumnToTable(string $tableName, string $column, ColumnType $type): bool
+    {
+        $sql = $this->getAddColumnSQL($column, $type);
+        return $this->sqlQuery($sql) !== false;
+    }
+
+    public function genSQL()
+    {
+        if (empty($this->columns)) {
             return false;
         }
 
         $columnDefinitions = [];
-        
+
         $primaryKeys = [];
-        foreach($this->columns as $name=> $colType) {
-            $columnDefinitions[] = "  $name ".$colType->getSql(); 
-            if($colType->isPrimaryKey()){
-                $primaryKeys[]=$name;
+        foreach ($this->columns as $name => $colType) {
+            $columnDefinitions[] = "  $name " . $colType->getSql();
+            if ($colType->isPrimaryKey()) {
+                $primaryKeys[] = $name;
             }
         }
 
         $sql = "CREATE TABLE IF NOT EXISTS {$this->tableName} (\n";
-        $sql .= implode(",\n",$columnDefinitions);
+        $sql .= implode(",\n", $columnDefinitions);
         $sql .= "\n);";
         return $sql;
     }
 
-    public function createDatabase($dbname) {
+    public function createDatabase($dbname)
+    {
         try {
             $this->pdo = new \PDO(
                 "mysql:host={$this->config['host']}",
@@ -114,120 +134,121 @@ class DataBase {
     }
     /**
      * This is called when creating the table
-     * @param String $tableName required, or can use $this->tableName which is accessed from the Database Class
-     * @param Array $columns also required, 
-     * @return Bool true if database has been created and false when failed
+     * @param string $tableName required, or can use $this->tableName which is accessed from the Database Class
+     * @param array $columns also required, 
+     * @return bool true if database has been created and false when failed
      */
-    
-    public function createTable() : bool {
+
+    public function createTable(): bool
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
             $qrry = $this->genSQL();
-            if(!$qrry){
+            if (!$qrry) {
                 return false;
-            }else{
+            } else {
                 $stmt = $this->pdo->prepare($qrry);
                 return $stmt->execute();
-                
             }
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             echo $e->getMessage();
             return false;
-
         }
     }
 
     // CRUD operations and other methods...
 
-    public function findAll(Int $page=1,Int $limit=5) {
+    public function findAll(Int $page = 1, Int $limit = 5)
+    {
         $n = $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             return $n;
         }
-        try{
+        try {
 
             $stmt = $this->pdo->prepare("SELECT * FROM {$this->tableName}");
             $stmt->execute();
             $this->results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             return $this;
-        }catch(\PDOException $e){
-            return 'errror'.$e->getMessage();
-            
+        } catch (\PDOException $e) {
+            return 'errror' . $e->getMessage();
         }
     }
 
-    public function paginate(Int $page = 1,Int $limit = 20) {
+    public function paginate(Int $page = 1, Int $limit = 20)
+    {
         if (!$this->results) {
-            return ['results'=>[],'totalPages'=>0,'page'=>1,'limit'=> $limit,'totalItems'=>0];
-            
+            return ['results' => [], 'totalPages' => 0, 'page' => 1, 'limit' => $limit, 'totalItems' => 0];
         }
 
-        $total = ceil( count($this->results)/$limit);
+        $total = ceil(count($this->results) / $limit);
         $offset = ($page - 1) * $limit;
         $paginatedResults = array_slice($this->results, $offset, $limit);
-        
+
         return [
             'results' => $paginatedResults,
             'totalPages' => $total,
             'page' => $page,
             'limit' => $limit,
-            'totalItems'=>count($this->results)
+            'totalItems' => count($this->results)
         ];
     }
 
-  
-    public function handleFileUploads($data) {
-    $outP = null;
-    $uploadDir = dirname(__DIR__). '/../uploads/';
 
-    // Create the uploads directory if it doesn't exist
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
-    }
+    public function handleFileUploads($data)
+    {
+        $outP = null;
+        $uploadDir = dirname(__DIR__) . '/../uploads/';
 
-    // Loop through the file fields
-    foreach ($this->fileFields as $fileField) {
-        // Check if the file field exists and there was no upload error
-        if (isset($_FILES[$fileField]) && $_FILES[$fileField]['error'] !== UPLOAD_ERR_NO_FILE) {
-            // Continue only if no error occurred with the file upload
-            if ($_FILES[$fileField]['error'] === UPLOAD_ERR_OK) {
-                $originalFilename = basename($_FILES[$fileField]['name']);
-                $pathinfo = pathinfo($originalFilename);
-                $extension = $pathinfo['extension'];
+        // Create the uploads directory if it doesn't exist
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
 
-                // Generate a unique ID for the file
-                $uniqueId = uniqid('', true);
-                $filename = $uniqueId . '.' . $extension;
+        // Loop through the file fields
+        foreach ($this->fileFields as $fileField) {
+            // Check if the file field exists and there was no upload error
+            if (isset($_FILES[$fileField]) && $_FILES[$fileField]['error'] !== UPLOAD_ERR_NO_FILE) {
+                // Continue only if no error occurred with the file upload
+                if ($_FILES[$fileField]['error'] === UPLOAD_ERR_OK) {
+                    $originalFilename = basename($_FILES[$fileField]['name']);
+                    $pathinfo = pathinfo($originalFilename);
+                    $extension = $pathinfo['extension'];
 
-                $targetFilePath = $uploadDir . $filename;
+                    // Generate a unique ID for the file
+                    $uniqueId = uniqid('', true);
+                    $filename = $uniqueId . '.' . $extension;
 
-                // Move the uploaded file to the target directory
-                if (move_uploaded_file($_FILES[$fileField]['tmp_name'], $targetFilePath)) {
-                    // Save the filename in the $data array for future use (e.g., storing in the database)
-                    $data[$fileField] = $filename;
-                    $outP = $data;
+                    $targetFilePath = $uploadDir . $filename;
+
+                    // Move the uploaded file to the target directory
+                    if (move_uploaded_file($_FILES[$fileField]['tmp_name'], $targetFilePath)) {
+                        // Save the filename in the $data array for future use (e.g., storing in the database)
+                        $data[$fileField] = $filename;
+                        $outP = $data;
+                    } else {
+                        return "Error uploading file: " . $_FILES[$fileField]['name'];
+                    }
                 } else {
-                    return "Error uploading file: " . $_FILES[$fileField]['name'];
+                    // Handle different file upload errors (optional)
+                    return "File upload error for field: " . $fileField;
                 }
-            } else {
-                // Handle different file upload errors (optional)
-                return "File upload error for field: " . $fileField;
             }
         }
+
+        // Return the updated $data array or the original data if no files were uploaded
+        return $outP ? $outP : $data;
     }
 
-    // Return the updated $data array or the original data if no files were uploaded
-    return $outP ? $outP : $data;
-}
 
-
-    public function uploadHelper(Array $data) {
-        $uploadDir = dirname(__DIR__).'/../uploads/';
-        $filenames= [];
+    public function uploadHelper(array $data)
+    {
+        $uploadDir = dirname(__DIR__) . '/../uploads/';
+        $filenames = [];
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0777, true);
         }
@@ -237,11 +258,11 @@ class DataBase {
                 $originalFilename = basename($_FILES[$fileField]['name']);
                 $pathinfo = pathinfo($originalFilename);
                 $extension = $pathinfo['extension'];
-                
+
                 // Generate a unique ID and create the new filename
                 $uniqueId = uniqid('', true); // Generate a unique ID
                 $filename = $uniqueId . '.' . $extension; // Append the file extension to the unique ID
-                
+
                 $targetFilePath = $uploadDir . $filename;
 
                 if (move_uploaded_file($_FILES[$fileField]['tmp_name'], $targetFilePath)) {
@@ -256,25 +277,26 @@ class DataBase {
 
 
 
-    public function findOne(Array $criteria) {
+    public function findOne(array $criteria)
+    {
         $this->connect();
         if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-    
+
         try {
             // Construct the WHERE clause from the criteria array
             $where = implode(" AND ", array_map(function ($key) {
                 return "$key = ?";
             }, array_keys($criteria)));
-    
+
             // Prepare the SQL statement
             $stmt = $this->pdo->prepare("SELECT * FROM {$this->tableName} WHERE $where LIMIT 1");
-    
+
             // Execute the statement with the criteria values
             $stmt->execute(array_values($criteria));
-    
+
             // Fetch and return the result
             $this->results = $stmt->fetch(\PDO::FETCH_ASSOC);
             return $this;
@@ -285,82 +307,85 @@ class DataBase {
 
 
 
-    public function addOne(Array $data) {
+    public function addOne(array $data)
+    {
 
-    $n = $this->connect();
-    
-    if (!$this->pdo) {
-        //echo "Database connection failed";
-        return $n;
-    }
+        $n = $this->connect();
 
-    // Check if files are present in the $data array
-    $hasFiles = false;
-    foreach ($_FILES as $fileKey => $fileValue) {
-        if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
-            $hasFiles = true;
-            break;
-        }
-    }
-
-    // If files exist in the posted data, handle file uploads
-    if ($hasFiles) {
-        $fileUpload = $this->handleFileUploads($data);
-        if ($fileUpload == null) {
-            return false;  // Return false if file upload fails
-        } else {
-            $data = $fileUpload;  // Merge file data with the posted data
-        }
-    }
-
-    try {
-        // Prepare and execute the INSERT query
-        error_log(json_encode($data));
-        $keys = implode(", ", array_keys($data));
-        $placeholders = implode(", ", array_fill(0, count($data), "?"));
-        $stmt = $this->pdo->prepare("INSERT INTO {$this->tableName} ($keys) VALUES ($placeholders)");
-
-        return $stmt->execute(array_values($data));
-    } catch (\PDOException $e) {
-        return $e->getMessage();
-    }
-}
-
-
-    public function addMany(Array $data) {
-        $this->connect();
-        if(!$this->pdo){
-            echo "Database connection failed";
-            return false;
+        if (!$this->pdo) {
+            //echo "Database connection failed";
+            return $n;
         }
 
-        try{
+        // Check if files are present in the $data array
+        $hasFiles = false;
+        foreach ($_FILES as $fileKey => $fileValue) {
+            if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
+                $hasFiles = true;
+                break;
+            }
+        }
 
-            
-                    $keys = implode(", ", array_keys($data[0]));
-                    $placeholders = implode(", ", array_fill(0, count($data[0]), "?"));
-                    $stmt = $this->pdo->prepare("INSERT INTO {$this->tableName} ($keys) VALUES ($placeholders)");
-            
-                    try {
-                        $this->pdo->beginTransaction();
-                        foreach ($data as $row) {
-                            $stmt->execute(array_values($row));
-                        }
-                        $this->pdo->commit();
-                        return true;
-                    } catch (\PDOException $e) {
-                        $this->pdo->rollBack();
-                        echo "Failed to add records: " . $e->getMessage();
-                        return false;
-                    }
-        }catch(\PDOException $e){
+        // If files exist in the posted data, handle file uploads
+        if ($hasFiles) {
+            $fileUpload = $this->handleFileUploads($data);
+            if ($fileUpload == null) {
+                return false;  // Return false if file upload fails
+            } else {
+                $data = $fileUpload;  // Merge file data with the posted data
+            }
+        }
+
+        try {
+            // Prepare and execute the INSERT query
+            error_log(json_encode($data));
+            $keys = implode(", ", array_keys($data));
+            $placeholders = implode(", ", array_fill(0, count($data), "?"));
+            $stmt = $this->pdo->prepare("INSERT INTO {$this->tableName} ($keys) VALUES ($placeholders)");
+
+            return $stmt->execute(array_values($data));
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function update(Array $dataToUpdate, Array $updateCondition) {
+
+    public function addMany(array $data)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
+            echo "Database connection failed";
+            return false;
+        }
+
+        try {
+
+
+            $keys = implode(", ", array_keys($data[0]));
+            $placeholders = implode(", ", array_fill(0, count($data[0]), "?"));
+            $stmt = $this->pdo->prepare("INSERT INTO {$this->tableName} ($keys) VALUES ($placeholders)");
+
+            try {
+                $this->pdo->beginTransaction();
+                foreach ($data as $row) {
+                    $stmt->execute(array_values($row));
+                }
+                $this->pdo->commit();
+                return true;
+            } catch (\PDOException $e) {
+                $this->pdo->rollBack();
+                echo "Failed to add records: " . $e->getMessage();
+                return false;
+            }
+        } catch (\PDOException $e) {
+            return $e->getMessage();
+        }
+    }
+
+    public function update(array $dataToUpdate, array $updateCondition)
+    {
+        $this->connect();
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
@@ -372,24 +397,25 @@ class DataBase {
             }
         }
 
-        try{
+        try {
 
             $set = implode(", ", array_map(fn($key) => "$key = ?", array_keys($dataToUpdate)));
             $where = implode(" AND ", array_map(fn($key) => "$key = ?", array_keys($updateCondition)));
             $stmt = $this->pdo->prepare("UPDATE {$this->tableName} SET $set WHERE $where");
             $outp = $stmt->execute(array_merge(array_values($dataToUpdate), array_values($updateCondition)));
             return $outp;
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function updateMany(Array $data, Array $conditions) {
+    public function updateMany(array $data, array $conditions)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
-            exit();
+            //exit();
         }
 
         try {
@@ -409,29 +435,31 @@ class DataBase {
         }
     }
 
-    public function delete(Array $condition) {
+    public function delete(array $condition)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
 
             $where = implode(" AND ", array_map(fn($key) => "$key = ?", array_keys($condition)));
             $stmt = $this->pdo->prepare("DELETE FROM {$this->tableName} WHERE $where");
             return $stmt->execute(array_values($condition));
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function deleteMany(Array $conditions) {
+    public function deleteMany(array $conditions)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
 
             try {
                 $this->pdo->beginTransaction();
@@ -447,76 +475,82 @@ class DataBase {
                 echo "Failed to delete records: " . $e->getMessage();
                 return false;
             }
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function search(Array $criteria) {
+    public function search(array $criteria)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
 
             $where = implode(" AND ", array_map(fn($key) => "$key LIKE ?", array_keys($criteria)));
             $stmt = $this->pdo->prepare("SELECT * FROM {$this->tableName} WHERE $where");
             $stmt->execute(array_map(fn($value) => "%$value%", array_values($criteria)));
             $this->results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             return $this;
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function sqlQuery(String $query,Array $params = []) {
+    public function sqlQuery(String $query, array $params = [])
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
 
-        try{
+        try {
 
             $stmt = $this->pdo->prepare($query);
             $stmt->execute($params);
             $this->results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             return $this->results;
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function tableExists($tableName){
+    public function tableExists($tableName)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
 
             $stmt = $this->pdo->prepare("SELECT count(*) as total FROM information_schema.tables WHERE table_schema = Database() AND table_name = ?");
             $stmt->execute([$tableName]);
             return $stmt->fetchAll(\PDO::FETCH_ASSOC);
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function getTableSchema($tableName){
+    public function getTableSchema($tableName)
+    {
         $stmt = $this->pdo->prepare("DESCRIBE $tableName");
         $stmt->execute();
         return $stmt->fetchAll(\PDO::FETCH_COLUMN);
     }
 
-    public function removeColumn($tableName, $columnName){
+    public function removeColumn($tableName, $columnName)
+    {
         $stmt = $this->pdo->prepare("ALTER TABLE $tableName DROP COLUMN $columnName");
         // echo $stmt>;
         return $stmt->execute();
     }
 
-    public function updateColumnType($tableName, $columnName, $newColumnType){
+    public function updateColumnType($tableName, $columnName, $newColumnType)
+    {
         $stmt = $this->pdo->prepare("ALTER TABLE $tableName MODIFY $columnName $newColumnType");
         return $stmt->execute();
     }
@@ -543,7 +577,7 @@ class DataBase {
 
         // Get the result
         $columnExists = $stmt->fetchColumn();
-        
+
         if ($columnExists == 0) {
             // Directly inject the column name and type (since placeholders cannot be used for SQL structure)
             $sql = "ALTER TABLE $tableName ADD $columnName $columnType";
@@ -556,13 +590,14 @@ class DataBase {
     }
 
 
-    public function getTablesList(){
+    public function getTablesList()
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
 
             $tables = [];
             $stmt = $this->pdo->prepare("SHOW TABLES");
@@ -571,34 +606,35 @@ class DataBase {
             foreach ($rows as $row) {
                 $tables[] = $row['Tables_in_' . $this->config['dbname']];
             }
-            return $tables;
-        }catch(\PDOException $e){
+            return  $tables;
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
 
-    public function dropTable($tableName){
+    public function dropTable($tableName)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
             $stmt = $this->pdo->prepare("DROP TABLE IF EXISTS $tableName");
             return $stmt->execute();
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
-       
     }
 
-    public function getColumns($tableName){
+    public function getColumns($tableName)
+    {
         $this->connect();
-        if(!$this->pdo){
+        if (!$this->pdo) {
             echo "Database connection failed";
             return false;
         }
-        try{
+        try {
 
             $columns = [];
             $stmt = $this->pdo->prepare("SHOW COLUMNS FROM $tableName");
@@ -608,12 +644,13 @@ class DataBase {
                 $columns[] = $row['Field'];
             }
             return $columns;
-        }catch(\PDOException $e){
+        } catch (\PDOException $e) {
             return $e->getMessage();
         }
     }
-    
-    public function getColumnType($tableName, $columnName) {
+
+    public function getColumnType($tableName, $columnName)
+    {
         try {
             $stmt = $this->pdo->prepare("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = :tableName AND COLUMN_NAME = :columnName");
             $stmt->bindParam(':tableName', $tableName);
@@ -630,11 +667,4 @@ class DataBase {
             throw new \Exception("Error getting column type: " . $e->getMessage());
         }
     }
-    
-
-
-
-    
-    
 }
-

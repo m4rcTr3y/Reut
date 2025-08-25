@@ -18,8 +18,8 @@ class ModelRouter{
      * Route this is responsilbe for adding the default crude operations on all the models/database tables you created
      * 
      * @param App $app slim app
-     * @param Array $config  databse config is also required
-     * @param String $modelsDir=/models the directory where your database classes are defined defualts to /models 
+     * @param array $config  databse config is also required
+     * @param string $modelsDir=/models the directory where your database classes are defined defualts to /models 
      * 
     */
     public static function Route(App $app,Array $config,String $modelsDir='/models'){

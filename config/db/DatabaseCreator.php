@@ -21,10 +21,16 @@ class DatabaseCreator{
         
         switch ($command) {
             case 'create':
+                //require dirname(__DIR__). '/migrate.php';
                 require dirname(__DIR__). '/migrate.php';
                 break;
             case 'update':
+                //require dirname(__DIR__) . '/update.php';
                 require dirname(__DIR__) . '/update.php';
+                break;
+            case 'status':
+                //require dirname(__DIR__) . '/update.php';
+                require dirname(__DIR__) . '/checkmigration.php';
                 break;
             default:
                 echo "Invalid command. Usage: php script.php <command>\n";

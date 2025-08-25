@@ -1,23 +1,27 @@
 <?php
+// Enhanced migrate.php
+// Changes:
+// - Uses genSQL() to generate CREATE TABLE SQL from $this->columns.
+// - Records table creations in migrations table.
+// - Uses sqlQuery() for migrations table creation and migration recording.
+// - Standardizes tableExists() to return bool.
+// - Normalizes table names to lowercase.
+// - Maintains relation sorting and improves error handling.
+
 require __DIR__ . "/../vendor/autoload.php";
 require __DIR__ . "/../config.php";
 
 use Reut\DB\DataBase;
+use Reut\DB\Exceptions\ConnectionError;
 
 // Autoload models dynamically
 spl_autoload_register(function ($class) {
     $prefix = 'Reut\\Models\\';
     $baseDir = __DIR__ . '/../models/';
 
-    // Check if the class uses the namespace prefix
     if (strpos($class, $prefix) === 0) {
-        // Get the relative class name
         $relativeClass = substr($class, strlen($prefix));
-
-        // Replace namespace separators with directory separators
         $file = realpath($baseDir . str_replace('\\', '/', $relativeClass) . '.php');
-
-        // Require the file if it exists
         if (file_exists($file)) {
             echo "Loading class: $file\n";
             require_once $file;
@@ -28,29 +32,41 @@ spl_autoload_register(function ($class) {
 // Create database
 $baseDb = new DataBase($config);
 if ($baseDb->createDatabase($config['dbname'])) {
-    $dbname = $config['dbname'];
-   // echo "$dbname Database created successfully.\n \n";
+    echo "{$config['dbname']} Database created successfully.\n";
 }
 
 // Connect to the database
-if ($baseDb->connect()) {
+try {
+    $baseDb->connect();
+
+    // Create migrations table
+    $migrationsTableSql = "
+        CREATE TABLE IF NOT EXISTS migrations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) NOT NULL UNIQUE,
+            sql_text TEXT NOT NULL,
+            batch INT NOT NULL,
+            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )";
+    $baseDb->sqlQuery($migrationsTableSql);
+
+    // Get current max batch and increment
+    $batchQuery = $baseDb->sqlQuery("SELECT MAX(batch) as max_batch FROM migrations");
+    $currentBatch = ($batchQuery['max_batch'] ?? 0) + 1;
+
     echo "Getting tables ...\n";
 
-    // Get all model class files in the 'models' directory
-    $modelClasses = array_diff(scandir(__DIR__ . '/../models/'), ['.', '..']);
-
-    //echo "Found: " . json_encode(array_values($modelClasses)) . "\n";
+    // Get model files
+    $modelFiles = array_diff(scandir(__DIR__ . '/../models/'), ['.', '..']);
 
     $noRelations = [];
     $withRelations = [];
 
-    foreach (array_values($modelClasses) as $fileName) {
+    foreach ($modelFiles as $fileName) {
         echo "Loading class: $fileName\n";
         $className = 'Reut\\Models\\' . pathinfo($fileName, PATHINFO_FILENAME);
 
-        // Check if the class exists
         if (class_exists($className)) {
-            // Instantiate the class
             $tableInstance = new $className($config);
             if (property_exists($tableInstance, 'hasRelationships') && $tableInstance->hasRelationships) {
                 $withRelations[] = $tableInstance;
@@ -64,37 +80,56 @@ if ($baseDb->connect()) {
 
     usort($withRelations, fn($a, $b) => $a->relationships <=> $b->relationships);
 
-    foreach ($noRelations as $tableInstance) {
-        $classNameParts = explode('Table', get_class($tableInstance));
-        $className = $classNameParts[0];
+    // Function to apply migration
+    function applyMigration($baseDb, $tableInstance, $currentBatch): void
+    {
+        $tableName = strtolower($tableInstance->tableName);
+        $migrationName = 'create_' . $tableName . '_table';
 
-        if ($tableInstance->tableExists($tableInstance->tableName)) {
-            echo $tableInstance.'talbr....';
-            echo get_class($tableInstance) . " already exists \n";
-        } else if ($tableInstance->createTable()) {
-            echo get_class($tableInstance) . " table created successfully.\n";
+        // Check if migration already applied
+        $checkStmt = $baseDb->sqlQuery("SELECT COUNT(*) as cnt FROM migrations WHERE name = :name", ['name' => $migrationName]);
+        if ($checkStmt['cnt'] > 0) {
+            echo get_class($tableInstance) . " migration already applied.\n";
+            return;
+        }
+
+        // Get SQL from columns
+        $sql = $tableInstance->genSQL();
+        if ($sql === false) {
+            throw new Exception("Failed to generate SQL for {$tableName}.");
+        }
+
+        // Execute table creation
+        if ($tableInstance->createTable()) {
+            $baseDb->sqlQuery(
+                "INSERT INTO migrations (name, sql_text, batch) VALUES (:name, :sql_text, :batch)",
+                ['name' => $migrationName, 'sql_text' => $sql, 'batch' => $currentBatch]
+            );
+            echo get_class($tableInstance) . " table created and migration recorded.\n";
         } else {
-            echo "Error creating " . get_class($tableInstance) . " table.\n";
+            throw new Exception("Error creating " . get_class($tableInstance) . " table.");
         }
     }
 
-    foreach ($withRelations as $tableInstance) {
-        $classNameParts = explode('Table', get_class($tableInstance));
-        $className = $classNameParts[0];
-        $qrry = $tableInstance->tableExists($tableInstance->tableName);
-        //echo json_encode($qrry);
-        if (  $qrry[0]['total'] != 0) {
-            //echo $tableInstance->tableName.'talbr....';
-            echo get_class($tableInstance) . " already exists\n";
-        } else if ($tableInstance->createTable()) {
-            echo get_class($tableInstance) . " table created successfully.\n";
+    // Create tables without relations
+    foreach ($noRelations as $tableInstance) {
+        if ($tableInstance->tableExists($tableInstance->tableName)) {
+            echo get_class($tableInstance) . " already exists.\n";
         } else {
-            echo "Error creating " . get_class($tableInstance) . " table.\n";
+            applyMigration($baseDb, $tableInstance, $currentBatch);
+        }
+    }
+
+    // Create tables with relations
+    foreach ($withRelations as $tableInstance) {
+        if ($tableInstance->tableExists($tableInstance->tableName)) {
+            echo get_class($tableInstance) . " already exists.\n";
+        } else {
+            applyMigration($baseDb, $tableInstance, $currentBatch);
         }
     }
 
     echo "\n";
-
-} else {
-    echo "Failed to connect to the database.\n";
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
 }

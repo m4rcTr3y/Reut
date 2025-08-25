@@ -13,6 +13,7 @@
     "autoload":{
         "psr-4":{
             "Reut\\DB\\Types\\":"config/db/types/",
+            "Reut\\DB\\Exceptions\\":"config/db/exceptions/",
             "Reut\\DB\\":"config/db/",
             "Reut\\DB\\Creator\\":"config/db/",
             "Reut\\Auth\\":"config/auth/",

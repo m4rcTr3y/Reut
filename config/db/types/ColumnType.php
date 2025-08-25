@@ -25,7 +25,7 @@ abstract class ColumnType{
     protected $autoIncrement;
     protected $isPrimary;
 
-    public function __construct(bool $nullable=true,string $default = null,bool $isPrimary=false,bool $autoIncrement=false){
+    public function __construct(bool $nullable=true,string|null $default = null,bool $isPrimary=false,bool $autoIncrement=false){
         $this->nullable = $nullable;
         $this->default = $default;
         $this->isPrimary = $isPrimary;

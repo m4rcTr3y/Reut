@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Reut\DB\Types;
@@ -17,10 +18,16 @@ namespace Reut\DB\Types;
  */
 
 
- 
-class Integer extends ColumnType{
-    public function __construct(bool $nullable = true,bool $isPrimay=false,bool $autoIncrement=false,$default = null){
-        parent::__construct($nullable,$default,$isPrimay,$autoIncrement);
+
+class Integer extends ColumnType
+{
+    public function __construct(bool $nullable = true, bool $isPrimay = false, bool $autoIncrement = false, string|null $default)
+    {
+        parent::__construct(
+            $nullable, 
+            $default, 
+            $isPrimay, 
+            $autoIncrement);
         $this->name = "INTEGER";
     }
 }
