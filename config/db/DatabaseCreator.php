@@ -24,7 +24,7 @@ class DatabaseCreator{
                 //require dirname(__DIR__). '/migrate.php';
                 require dirname(__DIR__). '/migrate.php';
                 break;
-            case 'update':
+            case 'migrate':
                 //require dirname(__DIR__) . '/update.php';
                 require dirname(__DIR__) . '/update.php';
                 break;
@@ -36,7 +36,8 @@ class DatabaseCreator{
                 echo "Invalid command. Usage: php script.php <command>\n";
                 echo "Commands:\n";
                 echo "  create  - Initial start of project\n";
-                echo "  update  - Update tables\n";
+                echo "  status  - check for pending migrations in the models\n";
+                echo "  migrate - apply migrations to the table\n";
                 exit(1);
         }
     }

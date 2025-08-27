@@ -39,5 +39,26 @@ class MessagesTable extends DataBase
                 false
             )
         );
+        $this->addColumn(
+            'lastname',
+            new Varchar(
+                40,
+                true,
+                null,
+                false
+            )
+        );
+        $this->addColumn(
+            'firstname',
+            new Varchar(
+                40,
+                true,
+                null,
+                false
+            )
+        );
+        
+     
+     
     }
 }

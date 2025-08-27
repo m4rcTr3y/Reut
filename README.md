@@ -90,11 +90,27 @@ class MessagesTable extends DataBase {
 
 ### Create Table from CLI
 
-To create the tables in the database based on the definitions in your model classes, run the following command:
+To create the tables in the database based on the definitions in your model classes, run the following command (command always run first on new project):
+
+```bash
+php manage.php create
+```
+
+### update table from CLI
+To update the table column if you added or removed a new definition e.g. `  $this->addColumn('name', new Varchar(255, false));` in the models, this command can be used to update the database 
+
 
 ```bash
 php manage.php migrate
 ```
+### Display migrations and migration status
+
+To display information about pending migrations in the project or in the models so as the definitions are in sync with the database.
+
+```bash
+php manage.php status
+```
+
 
 This will automatically generate the necessary database tables as defined in your PHP classes within the `models` directory.  
 
@@ -245,6 +261,7 @@ While REUT provides a solid foundation for web development, there are several en
 - **Bug Fixes**: Addressing known issues and improving overall stability.
 - **Performance Optimization**: Refining the framework to ensure faster execution and reduced resource usage.
 - **Extended Documentation**: Providing more detailed guides and examples for developers.
+- **Support PostgreSQL**: adding support for postgresql for this case database connection.
 
 Stay tuned for updates and feel free to contribute to the project on GitHub!
 

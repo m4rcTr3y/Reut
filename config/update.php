@@ -1,13 +1,9 @@
 <?php
-// Enhanced update.php
+// Updated update.php
 // Changes:
-// - Checks $this->columns for new columns added via addColumn().
-// - Uses getAddColumnSQL() to generate ALTER TABLE SQL.
-// - Records column additions in migrations table.
-// - Fixes orphan table detection to match Messages -> MessagesTable.php.
-// - Uses sqlQuery() for migrations table creation and column additions.
-// - Normalizes table names to lowercase.
-// - Uses $this->columns instead of $table->schema.
+// - Generate unique migration names with timestamp for add and drop.
+// - Removed check for existing migration name; apply based on schema diff.
+// - Normalized table names to lowercase.
 
 require __DIR__ . "/../vendor/autoload.php";
 require __DIR__ . "/../config.php";
@@ -53,81 +49,81 @@ try {
         $tablesInDatabase = $baseDb->getTablesList();
 
         // Check for orphan tables
-        foreach ($tablesInDatabase as $tableName) {
+         foreach ($tablesInDatabase as $tableName) {
             $expectedModelFile = ucfirst($tableName) . 'Table.php'; // messages -> MessagesTable.php
-            if (!in_array($expectedModelFile, $modelFiles)) {
+
+            
+            $checkThere = in_array((string)$expectedModelFile, $modelFiles,true);
+             //$className = 'Reut\\Models\\' . pathinfo($expected, PATHINFO_FILENAME);
+
+            if (!$checkThere && $tableName !== 'migrations') {
                 echo "Table '{$tableName}' exists in {$config['dbname']} but no model class found.\n";
                 echo "Do you want to drop this table? (yes/no): ";
                 $response = trim(fgets(STDIN));
-                if (strtolower($response) === 'yes') {
+                if (strtolower($response) === 'yes' || strtolower($response) === 'y') {
                     $baseDb->dropTable($tableName);
                     echo "'{$tableName}' dropped from database.\n";
                 } else {
                     echo "Proceeding without dropping '{$tableName}'...\n";
                 }
+            }else{
+               
             }
         }
-
+        
         // Check models for updates
         foreach ($modelFiles as $fileName) {
             $className = pathinfo($fileName, PATHINFO_FILENAME);
+          
             $classFullName = 'Reut\\Models\\' . $className;
-            $tableName = str_replace('Table', '', $className); // MessagesTable -> messages
+            $tableName = str_replace('Table', '', $className);
 
             if (class_exists($classFullName)) {
                 $tableInstance = new $classFullName($config);
 
                 if (!$tableInstance->tableExists($tableName)) {
-                    // Create missing table
-                    $migrationName = 'create_' . $tableName . '_table';
-                    $checkStmt = $baseDb->sqlQuery("SELECT COUNT(*) as cnt FROM migrations WHERE name = :name", ['name' => $migrationName]);
-                    if ($checkStmt['cnt'] === 0) {
-                        $sql = $tableInstance->genSQL();
-                        if ($sql === false) {
-                            throw new Exception("Failed to generate SQL for {$tableName}.");
-                        }
-                        if ($tableInstance->createTable()) {
+                    // Create missing table (handled in migrate.php, but if needed here)
+                    echo "Table '{$tableName}' does not exist. Run migrate.php to create.\n";
+                } else {
+                    $timestamp = date('YmdHis');
+                    // Check for schema updates
+                    $dbColumns = $tableInstance->getTableSchema($tableName);
+                    $modelColumns = array_filter($tableInstance->columns, fn($key) => strpos($key, 'FOREIGN KEY') === false, ARRAY_FILTER_USE_KEY);
+                    $modelColumnNames = array_keys($modelColumns);
+
+                    // Add missing columns
+                    $missingColumns = array_diff($modelColumnNames, $dbColumns);
+                    if (!empty($missingColumns)) {
+                        echo "Applying changes to: {$className}.\n";
+                    }
+                    foreach ($missingColumns as $column) {
+                        $definition = $tableInstance->columns[$column];
+                        $migrationName = 'add_' . $column . '_to_' . $tableName . '_table_' . $timestamp;
+                        $sql = $tableInstance->getAddColumnSQL($column, $definition);
+                        if ($tableInstance->addColumnToTable($column, $definition)) {
                             $baseDb->sqlQuery(
                                 "INSERT INTO migrations (name, sql_text, batch) VALUES (:name, :sql_text, :batch)",
                                 ['name' => $migrationName, 'sql_text' => $sql, 'batch' => $currentBatch]
                             );
-                            echo "{$className} table created and migration recorded.\n";
+                            echo "Added column '{$column}' to {$className} table and migration recorded ({$migrationName}).\n";
                         } else {
-                            echo "Error creating {$className} table.\n";
+                            echo "Error adding column '{$column}' to {$className} table.\n";
                         }
-                    } else {
-                        echo "{$className} migration already applied.\n";
                     }
-                } else {
-                    // Check for new columns in $this->columns
-                    $dbColumns = $tableInstance->getTableSchema($tableName);
-                    $modelColumns = removeItemT($tableInstance->columns, 'FOREIGN KEY');
-                    $modelColumnNames = array_keys($modelColumns);
-                    $missingColumns = array_diff($modelColumnNames, $dbColumns);
 
-                    if (empty($missingColumns)) {
-                        echo "No changes to apply in {$className}.\n";
-                    } else {
-                        echo "Applying changes to: {$className}.\n";
-                        foreach ($missingColumns as $column) {
-                            $definition = $tableInstance->columns[$column];
-                            $migrationName = 'add_' . $column . '_to_' . $tableName . '_table';
-                            $checkStmt = $baseDb->sqlQuery("SELECT COUNT(*) as cnt FROM migrations WHERE name = :name", ['name' => $migrationName]);
-                           
-                            if ($checkStmt[0]['cnt'] === 0) {
-                                $sql = $tableInstance->getAddColumnSQL($column, $definition);
-                                if ($tableInstance->addColumnToTable($tableName, $column, $definition)) {
-                                    $baseDb->sqlQuery(
-                                        "INSERT INTO migrations (name, sql_text, batch) VALUES (:name, :sql_text, :batch)",
-                                        ['name' => $migrationName, 'sql_text' => $sql, 'batch' => $currentBatch]
-                                    );
-                                    echo "Added column '{$column}' to {$className} table and migration recorded.\n";
-                                } else {
-                                    echo "Error adding column '{$column}' to {$className} table.\n";
-                                }
-                            } else {
-                                echo "Migration for column '{$column}' already applied.\n";
-                            }
+                    // Drop removed columns
+                    $columnsToDrop = array_diff($dbColumns, $modelColumnNames);
+                    foreach ($columnsToDrop as $column) {
+                        $migrationName = 'drop_' . $column . '_from_' . $tableName . '_table_' . $timestamp;
+                        $sql = $tableInstance->getDropColumnSQL($column);
+                        if ($tableInstance->dropColumn($tableName, $column)) {
+                            $baseDb->sqlQuery(
+                                "INSERT INTO migrations (name, sql_text, batch) VALUES (:name, :sql_text, :batch)",
+                                ['name' => $migrationName, 'sql_text' => $sql, 'batch' => $currentBatch]
+                            );
+                            echo "Dropped column '{$column}' from {$className} table and migration recorded ({$migrationName}).\n";
+                        } else {
+                            echo "Error dropping column '{$column}' from {$className} table.\n";
                         }
                     }
                 }
@@ -137,17 +133,7 @@ try {
         throw new Exception("Failed to connect to the database. Check your config or MySQL availability.");
     }
 } catch (PDOException $e) {
-    echo "PDOException: " . $e->getMessage() . "\n";
+    echo "\nPDOException: " . $e->getMessage() . "\n";
 } catch (Exception $e) {
-    echo "Exception: " . $e->getMessage() . "\n";
-}
-
-function removeItemT($array, $textToSearch): array
-{
-    foreach ($array as $key => $value) {
-        if (strpos($key, $textToSearch) !== false) {
-            unset($array[$key]);
-        }
-    }
-    return $array;
+    echo "\nException: " . $e->getMessage() . "\n";
 }

@@ -85,10 +85,10 @@ class DataBase
 
     public function getAddColumnSQL(string $column, ColumnType $type): string
     {
-        return "ALTER TABLE " . strtolower($this->tableName) . " ADD $column " . $type->getSql();
+        return "ALTER TABLE " . $this->tableName . " ADD $column " . $type->getSql();
     }
 
-    public function addColumnToTable(string $tableName, string $column, ColumnType $type): bool
+    public function addColumnToTable(string $column, ColumnType $type): bool
     {
         $sql = $this->getAddColumnSQL($column, $type);
         return $this->sqlQuery($sql) !== false;
@@ -518,20 +518,36 @@ class DataBase
         }
     }
 
-    public function tableExists($tableName)
+    public function tableExists(string $tableName): bool
     {
+        // Ensure connection is established
         $this->connect();
         if (!$this->pdo) {
-            echo "Database connection failed";
-            return false;
+            throw new \RuntimeException('Database connection failed');
         }
-        try {
 
-            $stmt = $this->pdo->prepare("SELECT count(*) as total FROM information_schema.tables WHERE table_schema = Database() AND table_name = ?");
-            $stmt->execute([$tableName]);
-            return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        try {
+            // Use proper SQL syntax for checking table existence
+            $stmt = $this->pdo->prepare(
+                'SELECT EXISTS (
+                SELECT 1 
+                FROM information_schema.tables 
+                WHERE table_schema = ? 
+                AND table_name = ?
+            ) as table_exists'
+            );
+
+            $stmt->execute([$this->config['dbname'], $tableName]);
+
+            // Fetch single value since we only need the EXISTS result
+            $result = $stmt->fetchColumn();
+
+            // Convert to boolean
+            return (bool) $result;
         } catch (\PDOException $e) {
-            return $e->getMessage();
+            // Log the error in a production environment instead of echoing
+            error_log('Table existence check failed: ' . $e->getMessage());
+            return false;
         }
     }
 
@@ -553,6 +569,17 @@ class DataBase
     {
         $stmt = $this->pdo->prepare("ALTER TABLE $tableName MODIFY $columnName $newColumnType");
         return $stmt->execute();
+    }
+
+    public function getDropColumnSQL(string $column): string
+    {
+        return "ALTER TABLE " . $this->tableName . " DROP COLUMN $column";
+    }
+
+    public function dropColumn(string $tableName, string $column): bool
+    {
+        $sql = "ALTER TABLE " . $tableName . " DROP COLUMN $column";
+        return $this->sqlQuery($sql) !== false;
     }
 
     public function addColumnTable($tableName, $columnName, $columnType)

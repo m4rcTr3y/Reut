@@ -1,12 +1,9 @@
 <?php
-// Enhanced migrate.php
+// Updated migrate.php
 // Changes:
-// - Uses genSQL() to generate CREATE TABLE SQL from $this->columns.
-// - Records table creations in migrations table.
-// - Uses sqlQuery() for migrations table creation and migration recording.
-// - Standardizes tableExists() to return bool.
-// - Normalizes table names to lowercase.
-// - Maintains relation sorting and improves error handling.
+// - Generate unique migration names with timestamp for table creation.
+// - Removed check for existing migration name; apply if table doesn't exist.
+// - Normalized table names to lowercase.
 
 require __DIR__ . "/../vendor/autoload.php";
 require __DIR__ . "/../config.php";
@@ -83,15 +80,9 @@ try {
     // Function to apply migration
     function applyMigration($baseDb, $tableInstance, $currentBatch): void
     {
-        $tableName = strtolower($tableInstance->tableName);
-        $migrationName = 'create_' . $tableName . '_table';
-
-        // Check if migration already applied
-        $checkStmt = $baseDb->sqlQuery("SELECT COUNT(*) as cnt FROM migrations WHERE name = :name", ['name' => $migrationName]);
-        if ($checkStmt['cnt'] > 0) {
-            echo get_class($tableInstance) . " migration already applied.\n";
-            return;
-        }
+        $tableName = $tableInstance->tableName;
+        $timestamp = date('YmdHis');
+        $migrationName = 'create_' . $tableName . '_table_' . $timestamp;
 
         // Get SQL from columns
         $sql = $tableInstance->genSQL();
@@ -105,7 +96,7 @@ try {
                 "INSERT INTO migrations (name, sql_text, batch) VALUES (:name, :sql_text, :batch)",
                 ['name' => $migrationName, 'sql_text' => $sql, 'batch' => $currentBatch]
             );
-            echo get_class($tableInstance) . " table created and migration recorded.\n";
+            echo get_class($tableInstance) . " table created and migration recorded ({$migrationName}).\n";
         } else {
             throw new Exception("Error creating " . get_class($tableInstance) . " table.");
         }
@@ -113,7 +104,8 @@ try {
 
     // Create tables without relations
     foreach ($noRelations as $tableInstance) {
-        if ($tableInstance->tableExists($tableInstance->tableName)) {
+        $tableName = $tableInstance->tableName;
+        if ($tableInstance->tableExists($tableName)) {
             echo get_class($tableInstance) . " already exists.\n";
         } else {
             applyMigration($baseDb, $tableInstance, $currentBatch);
@@ -122,7 +114,8 @@ try {
 
     // Create tables with relations
     foreach ($withRelations as $tableInstance) {
-        if ($tableInstance->tableExists($tableInstance->tableName)) {
+        $tableName = $tableInstance->tableName;
+        if ($tableInstance->tableExists($tableName)) {
             echo get_class($tableInstance) . " already exists.\n";
         } else {
             applyMigration($baseDb, $tableInstance, $currentBatch);
