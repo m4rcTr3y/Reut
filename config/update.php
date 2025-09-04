@@ -83,7 +83,7 @@ try {
 
                 if (!$tableInstance->tableExists($tableName)) {
                     // Create missing table (handled in migrate.php, but if needed here)
-                    echo "Table '{$tableName}' does not exist. Run migrate.php to create.\n";
+                    echo "Table '{$tableName}' does not exist in database. Run `php manage.php create` to create.\n";
                 } else {
                     $timestamp = date('YmdHis');
                     // Check for schema updates

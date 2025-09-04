@@ -9,7 +9,6 @@ Built on top of [Slim PHP](https://www.slimframework.com/) for routing, REUT use
 - **Slim PHP Routing**: Fast and flexible routing powered by Slim.
 - **Model-Based Database Management**: Define your database tables as PHP classes in the `models` directory—no manual SQL table creation required.
 - **Automatic CRUD API**: Default CRUD endpoints are generated for each defined model.
-- **JWT Authentication**: Built-in authentication system with token generation, refresh, and validation.
 - **File Upload Handling**: Automatically manages file uploads when defined in model fields.
 - **Customizable Routes**: Add custom routes in the `routers` directory with optional authentication middleware.
 - **Configurable Setup**: Database connection details can be set in `.env` or `config.php`.
@@ -96,6 +95,9 @@ To create the tables in the database based on the definitions in your model clas
 php manage.php create
 ```
 
+This will automatically generate the necessary database tables as defined in your PHP classes within the `models` directory.  
+
+
 ### update table from CLI
 To update the table column if you added or removed a new definition e.g. `  $this->addColumn('name', new Varchar(255, false));` in the models, this command can be used to update the database 
 
@@ -110,9 +112,24 @@ To display information about pending migrations in the project or in the models 
 ```bash
 php manage.php status
 ```
+### Generate Router configurations for the models
+
+To generate router configurations for the model, this will automatically generate the router file for each model in the project and also register it in the index.php so as to be accessed on the api
+
+```bash
+php manage.php generate:routes
+```
+
+### Generate model definitions or template
+
+This command can be used to generate model template for a table , arguments for a table name are required in the command
+
+```bash
+php manage.php generate:models Users
+```
+Here `Users` is the table name and are required to start with an uppercase letter as is used to create the className too, the table name can be later changed if required in the code.
 
 
-This will automatically generate the necessary database tables as defined in your PHP classes within the `models` directory.  
 
 
 ### Automatic Table Creation and CRUD Endpoints

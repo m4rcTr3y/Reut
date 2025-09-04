@@ -7,8 +7,8 @@ use Reut\DB\DataBase;
 use Reut\DB\Types\Varchar;
 use Reut\DB\Types\Integer;
 
-// This class represents the Accounts table in the database, extending the DataBase class for database operations
-class AccountsTable extends DataBase
+// This class represents the Cars table in the database, extending the DataBase class for database operations
+class CarsTable extends DataBase
 {
     // Constructor initializes the model with configuration and table settings
     // @param array $config Database configuration settings
@@ -17,15 +17,15 @@ class AccountsTable extends DataBase
         // Initialize the parent DataBase class with:
         // - $config: Database connection settings
         // - []: Initial empty columns array (to be populated below)
-        // - 'Accounts': The table name
+        // - 'Cars': The table name
         // - hasRelationships: Whether the table has relationships
         // - []: File fields array (for file uploads, if any)
         // - ['all']: Disabled routes array (routes to disable for this model)
         parent::__construct(
             $config,
             [],
-            'Accounts',
-            false,
+            'Cars',
+            true,
             [],
             ['all']
         );
