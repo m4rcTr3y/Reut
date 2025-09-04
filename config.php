@@ -17,5 +17,3 @@ $config = [
     'password' => $_ENV['DB_PASSWORD'],
     'dbname' =>  $_ENV['DB_NAME']
 ];
-
-//echo $config['username'];
